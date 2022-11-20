@@ -3,9 +3,9 @@
 // Company: 
 // Engineer: 
 // 
-// Create Date: 2022/11/13 19:17:24
+// Create Date: 2022/11/20 10:14:43
 // Design Name: 
-// Module Name: axi_stream_insert_header
+// Module Name: axi_insert_header
 // Project Name: 
 // Target Devices: 
 // Tool Versions: 
@@ -48,18 +48,19 @@ module axi_stream_insert_header #(
     output ready_insert
 );
 // Your code here
-
-	//º∆ ˝∆˜¥˙ÃÊ◊¥Ã¨ª˙
-	reg		  [2:0]  flag_reg_now = 0;		  										//0 idle ,1 READ_HEADER ,2 WAIT_AXIS ,3 READ_AXIS
-																					//4 WAIT_INSERT ,5 WRITE_NEW_AXIS ,6 TO_IDLE
-	reg		  [2:0]  flag_reg_next = 0;	
+  
+    localparam [2:0] IDLE = 0 , READ_HEADER = 1, WAIT_AXIS = 2 , READ_AXIS = 3 , WAIT_INSERT = 4 , WRITE_NEW_AXIS = 5 , TO_IDLE = 6;
+    
+	//ËÆ°Êï∞Âô®‰ª£ÊõøÁä∂ÊÄÅÊú∫
+	reg		  [2:0]  flag_reg_now = TO_IDLE;		  										
+	reg		  [2:0]  flag_reg_next = IDLE;	
 
 	
     //store data
-    reg [7:0] data_mem [0:DATA_DEPTH-1];											//32∏ˆ◊÷Ω⁄–Œ Ωº¥8bitsµƒ¥Ê¥¢∆˜
+    reg [7:0] data_mem [0:DATA_DEPTH-1];											//32‰∏™Â≠óËäÇÂΩ¢ÂºèÂç≥8bitsÁöÑÂ≠òÂÇ®Âô®
     reg [$clog2(DATA_DEPTH):0] front, rear;										
-																					//front «”√¿¥≥˝»•ø™Õ∑Œﬁ–ßµƒ◊÷Ω⁄
-																					//rear «”√¿¥º«¬º¥Ê¥¢∆˜”––ßµƒƒ©Œ≤Œª÷√
+																					//frontÊòØÁî®Êù•Èô§ÂéªÂºÄÂ§¥Êó†ÊïàÁöÑÂ≠óËäÇ
+																					//rearÊòØÁî®Êù•ËÆ∞ÂΩïÂ≠òÂÇ®Âô®ÊúâÊïàÁöÑÊú´Â∞æ‰ΩçÁΩÆ
     // output reg
     reg [DATA_WD-1 : 0]      data_out_reg;			
     reg [DATA_BYTE_WD-1 : 0] keep_out_reg;
@@ -67,46 +68,46 @@ module axi_stream_insert_header #(
     assign data_out     = data_out_reg;
     assign keep_out     = keep_out_reg;
 
-    assign ready_insert = flag_reg_now == 3'd0 ? 1 : 0;
-    assign ready_in     = flag_reg_now == 3'd3 ? 1 : 0;
-    assign valid_out    = flag_reg_now == 3'd5 ? 1 : 0;
-	assign last_out     = flag_reg_now == 3'd5 && front >= rear ? 1 : 0; 
+    assign ready_insert = flag_reg_now == IDLE ? 1 : 0;
+    assign ready_in     = ( flag_reg_now ==  READ_AXIS || last_in == 1 ) ? 1 : 0;
+    assign valid_out    = flag_reg_now == WRITE_NEW_AXIS ? 1 : 0;
+	assign last_out     = flag_reg_now == WRITE_NEW_AXIS && front >= rear ? 1 : 0; 
 
 	
-	//ƒ£ƒ‚◊¥Ã¨«–ªª
+	//Ê®°ÊãüÁä∂ÊÄÅÂàáÊç¢
 	always @ (*)
 		begin
-			if ( flag_reg_now == 0 )	  											// 0 idle
+			if ( flag_reg_now == IDLE )	  											// IDLE
 				begin
 					if( valid_insert == 1'b1 && ready_insert == 1'b1 )
-						flag_reg_next = 3'd3;
+						flag_reg_next = READ_AXIS;
 					else
-						flag_reg_next = 3'd0;
+						flag_reg_next = IDLE;
 				end
-			else if ( flag_reg_now == 3'd3 )	  									// 3 READ_AXIS
+			else if ( flag_reg_now == READ_AXIS )	  							    // READ_AXIS
 				begin
-					if( last_in == 1'b1 )
-						flag_reg_next = 3'd5;
+					if( last_in == 1'b1 && valid_in == 1'b1 && ready_in == 1'b1 )
+						flag_reg_next = WRITE_NEW_AXIS;
 					else
-						flag_reg_next = 3'd3;
+						flag_reg_next = READ_AXIS;
 				end
-			else if ( flag_reg_now == 3'd5 )	  									// 5 WRITE_NEW_AXIS
+			else if ( flag_reg_now == WRITE_NEW_AXIS )	  							// WRITE_NEW_AXIS
 				begin
 					if( last_out == 1'b1 )
-						flag_reg_next = 3'd6;
+						flag_reg_next = TO_IDLE;
 					else
-						flag_reg_next = 3'd5;
+						flag_reg_next = WRITE_NEW_AXIS;
 				end
-			else if ( flag_reg_now == 3'd6 )	  									// 6 TO_IDLE
+			else if ( flag_reg_now == TO_IDLE )	  									// TO_IDLE
 				begin
-						flag_reg_next = 3'd0;
+						flag_reg_next = IDLE;
 				end
 			else 
-						flag_reg_next = 3'd0;
+						flag_reg_next = IDLE;
 		end
 
 	always @(posedge clk or negedge rst_n) begin
-		if ( rst_n == 1'b0 ) flag_reg_next <= 3'd0;
+		if ( rst_n == 1'b0 ) flag_reg_next <= IDLE;
 		else flag_reg_now <= flag_reg_next;        
 	end
 
@@ -130,12 +131,12 @@ module axi_stream_insert_header #(
 	genvar j;
     generate for (j = 5'd0; j < DATA_DEPTH; j=j+1) begin
         always @(posedge clk or negedge rst_n) begin
-            if ( flag_reg_now == 3'd0 && flag_reg_next == 3'd0 )
+            if ( flag_reg_now == TO_IDLE && flag_reg_next == IDLE )
                 data_mem[j] <= 0;
-            else if ( flag_reg_now == 3'd0 && j >= rear && j < rear + DATA_BYTE_WD )
-                data_mem[j] <= header_insert[DATA_WD - 1 - (j-rear) * 8 -: 8];		//Ω´≤Â»Îµƒ÷°Õ∑º”»Î¥Ê¥¢∆˜
-            else if ( flag_reg_now == 3'd3 && ready_in == 1'b1 && valid_in == 1'b1 && j >= rear && j < rear + DATA_BYTE_WD)                
-                data_mem[j] <= data_in[DATA_WD - 1 -(j-rear) * 8 -: 8];				//Ω´ ‰»Îdata_in ˝æ›º”»Î¥Ê¥¢∆˜
+            else if ( flag_reg_now == IDLE && j >= rear && j < rear + DATA_BYTE_WD && valid_insert == 1 && ready_insert == 1 )
+                data_mem[j] <= header_insert[DATA_WD - 1 - (j-rear) * 8 -: 8];		//Â∞ÜÊèíÂÖ•ÁöÑÂ∏ßÂ§¥Âä†ÂÖ•Â≠òÂÇ®Âô®
+            else if ( flag_reg_now == READ_AXIS && ready_in == 1'b1 && valid_in == 1'b1 && j >= rear && j < rear + DATA_BYTE_WD )                
+                data_mem[j] <= data_in[DATA_WD - 1 -(j-rear) * 8 -: 8];				//Â∞ÜËæìÂÖ•data_inÊï∞ÊçÆÂä†ÂÖ•Â≠òÂÇ®Âô®
             else
                 data_mem[j] <= data_mem[j];
         end
@@ -143,39 +144,39 @@ module axi_stream_insert_header #(
     endgenerate
 
 
-	//front	”––ß◊÷Ω⁄ø™ ºŒª÷√
+	//front	ÊúâÊïàÂ≠óËäÇÂºÄÂßã‰ΩçÁΩÆ
 	always @(posedge clk or negedge rst_n) begin
-		if ( flag_reg_now == 3'd0 && flag_reg_next == 3'd0 )
+		if ( flag_reg_now == TO_IDLE && flag_reg_next == IDLE )
             front <= 0;
-        else if ( flag_reg_now == 3'd0 && flag_reg_next == 3'd3 )
-            front <= front + DATA_BYTE_WD - swar(keep_insert);						//≥˝»•÷°Õ∑Œﬁ–ßµƒŒª£¨º«¬ºŒª÷√
-        else if ( flag_reg_now == 3'd3 && flag_reg_next != 3'd3 && ready_out || flag_reg_now == 3'd5 )
-            front <= front + DATA_BYTE_WD;											//∂¡ ˝æ› ±£¨—≠ª∑‘ˆº” DATA_BYTE_WD
+        else if ( flag_reg_now == IDLE && flag_reg_next == READ_AXIS )
+            front <= front + DATA_BYTE_WD - swar(keep_insert);						//Èô§ÂéªÂ∏ßÂ§¥Êó†ÊïàÁöÑ‰ΩçÔºåËÆ∞ÂΩï‰ΩçÁΩÆ
+        else if ( flag_reg_now == READ_AXIS && flag_reg_next != READ_AXIS && ready_out || flag_reg_now == WRITE_NEW_AXIS && ready_out )
+            front <= front + DATA_BYTE_WD;											//ËØªÊï∞ÊçÆÊó∂ÔºåÂæ™ÁéØÂ¢ûÂä† DATA_BYTE_WD
         else 
             front <= front;
 	end
 
 
-	//rear	”––ß◊÷Ω⁄Ω· ¯Œª÷√
+	//rear	ÊúâÊïàÂ≠óËäÇÁªìÊùü‰ΩçÁΩÆ
 	always @(posedge clk or negedge rst_n) begin
-		if (  flag_reg_now == 3'd0 && flag_reg_next == 3'd0 )
+		if (  flag_reg_now == TO_IDLE && flag_reg_next == IDLE )
             rear <= 0;
-        else if ( flag_reg_now == 3'd0 && flag_reg_next == 3'd3 )
-            rear <= rear + DATA_BYTE_WD;											//º«¬º¥Ê¥¢∆˜¥Ê¥¢µƒ◊÷Ω⁄∏ˆ ˝
-        else if ( flag_reg_now == 3'd3 )            
-            rear <= rear + swar(keep_in);											//◊Ó∫Û“ª∏ˆdata_in”–Œﬁ–ß◊÷Ω⁄£¨–Ë“™Ãÿ ‚º∆À„
+        else if ( ( flag_reg_now == IDLE && flag_reg_next == READ_AXIS && valid_in == 1'b1 ) || ( ready_insert == 1 && valid_insert == 1'b1) )
+            rear <= rear + DATA_BYTE_WD;											//ËÆ∞ÂΩïÂ≠òÂÇ®Âô®Â≠òÂÇ®ÁöÑÂ≠óËäÇ‰∏™Êï∞
+        else if ( flag_reg_now == READ_AXIS && valid_in == 1'b1 )            
+            rear <= rear + swar(keep_in);											//ÊúÄÂêé‰∏Ä‰∏™data_inÊúâÊó†ÊïàÂ≠óËäÇÔºåÈúÄË¶ÅÁâπÊÆäËÆ°ÁÆó
         else
             rear <= rear;         
 	end
 
 	
-	//∂¡»° ˝æ›
+	//ËØªÂèñÊï∞ÊçÆ
 	genvar i;
     generate for (i = 2'd0; i < DATA_BYTE_WD; i=i+1) begin
         always @(posedge clk or negedge rst_n) begin
-            if ( flag_reg_now == 3'd0 )
+            if ( flag_reg_now == IDLE )
                 data_out_reg[DATA_WD-1-i*8 : DATA_WD-(i+1)*8] <= 0;
-            else if ( flag_reg_next == 3'd5 )
+            else if ( flag_reg_next == WRITE_NEW_AXIS )
                 data_out_reg[DATA_WD-1-i*8 : DATA_WD-(i+1)*8] <= data_mem[front+i];       
             else
                 data_out_reg[DATA_WD-1-i*8 : DATA_WD-(i+1)*8] <= data_out_reg[DATA_WD-1-i*8 : DATA_WD-(i+1)*8];       
@@ -184,12 +185,12 @@ module axi_stream_insert_header #(
     endgenerate
 
 	
-	// ‰≥ˆ ˝æ›µƒ”––ßŒª
+	//ËæìÂá∫Êï∞ÊçÆÁöÑÊúâÊïà‰Ωç
 	generate for (i = 2'd0; i < DATA_BYTE_WD; i=i+1) begin
         always @(posedge clk or negedge rst_n) begin
-            if ( flag_reg_now == 3'd0 )
+            if ( flag_reg_now == IDLE )
                 keep_out_reg[i] <= 0;
-            else if ( flag_reg_next == 3'd5 )
+            else if ( flag_reg_next == WRITE_NEW_AXIS )
                 keep_out_reg[DATA_BYTE_WD-i-1] <= front + i < rear ? 1 : 0;       
             else
                 keep_out_reg[i] <= keep_out_reg[i];     
@@ -198,3 +199,4 @@ module axi_stream_insert_header #(
     endgenerate
 
 endmodule
+
